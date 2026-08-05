@@ -2605,7 +2605,7 @@ async function registrarTraspaso(){
   if(cant>stockOrigen.stockActual){ alert('Cantidad supera el stock disponible ('+stockOrigen.stockActual+' unidades).'); return; }
   conf.textContent='Registrando...'; conf.classList.remove('hidden');
   try{
-    await db.collection('stock').doc(stockOrigen.docId).update({stockActual:firebase.firestore.FieldValue.increment(-cant)});
+    await db.collection('stock').doc(stockOrigen._id).update({stockActual:firebase.firestore.FieldValue.increment(-cant)});
     const destSnap=await db.collection('stock').where('item','==',item).where('talla','==',talla).where('bodega','==',destino).get();
     if(!destSnap.empty){
       await destSnap.docs[0].ref.update({stockActual:firebase.firestore.FieldValue.increment(cant)});
