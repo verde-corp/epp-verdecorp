@@ -1558,10 +1558,9 @@ async function importExcel(inp){
         const key=(item.bodega||'')+'|'+norm(item.item||'')+'|'+norm(String(item.talla||''));
         excelKeys.add(key);
         if(existingStockMap[key]){
-          // Actualizar preservando stockActual si el Excel trae 0 (no sobreescribir conteo real)
+          // Actualizar metadata pero NUNCA sobreescribir stockActual (la app lleva el conteo real)
           const existing=existingStockMap[key].data();
-          const update={...item};
-          if((item.stockActual||0)===0 && (existing.stockActual||0)>0) update.stockActual=existing.stockActual;
+          const update={...item, stockActual: existing.stockActual??item.stockActual};
           batch.update(existingStockMap[key].ref, update);
         } else {
           const ref=db.collection('stock').doc(); batch.set(ref,item);
