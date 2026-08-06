@@ -1542,17 +1542,31 @@ async function importExcel(inp){
     const allItems = [...stockBulnes, ...stockRomeral, ...stockEcocorp, ...autoStock];
     bar.style.width='50%'; msg.textContent=`Subiendo ${allItems.length} artículos...`;
 
-    // Delete existing stock docs
-    const existingSnap = await db.collection('stock').get();
-    const delBatch = db.batch();
-    existingSnap.forEach(d=>delBatch.delete(d.ref));
-    await delBatch.commit();
-
-    // Batch write stock (500 per batch)
+    // MERGE stock: actualizar existentes, crear nuevos, preservar artículos agregados desde la app
+    const existingStockSnap = await db.collection('stock').get();
+    const existingStockMap = {}; // key: bodega|norm(item)|norm(talla) → doc
+    existingStockSnap.forEach(d=>{
+      const dd=d.data();
+      const key=(dd.bodega||'')+'|'+norm(dd.item||'')+'|'+norm(String(dd.talla||''));
+      existingStockMap[key]=d;
+    });
+    const excelKeys=new Set();
     for(let i=0;i<allItems.length;i+=400){
       const chunk=allItems.slice(i,i+400);
       const batch=db.batch();
-      chunk.forEach(item=>{ const ref=db.collection('stock').doc(); batch.set(ref,item); });
+      chunk.forEach(item=>{
+        const key=(item.bodega||'')+'|'+norm(item.item||'')+'|'+norm(String(item.talla||''));
+        excelKeys.add(key);
+        if(existingStockMap[key]){
+          // Actualizar preservando stockActual si el Excel trae 0 (no sobreescribir conteo real)
+          const existing=existingStockMap[key].data();
+          const update={...item};
+          if((item.stockActual||0)===0 && (existing.stockActual||0)>0) update.stockActual=existing.stockActual;
+          batch.update(existingStockMap[key].ref, update);
+        } else {
+          const ref=db.collection('stock').doc(); batch.set(ref,item);
+        }
+      });
       await batch.commit();
       bar.style.width=String(50+Math.round((i/allItems.length)*30))+'%';
     }
