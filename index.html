@@ -354,6 +354,7 @@
               <option value="ROMERAL (Unificada)">ROMERAL (Unificada)</option>
               <option value="ECOCORP">ECOCORP</option>
             </select>
+            <input id="invSearch" type="text" placeholder="🔍 Filtrar por artículo..." class="input-base w-64" oninput="_filterInvRows()">
             <span class="text-xs text-gray-500">Ingresa el conteo real en la columna "Conteo Físico"</span>
           </div>
           <div id="invTablaWrap" class="hidden overflow-auto rounded-xl border border-gray-200">
@@ -2766,7 +2767,13 @@ function renderInventario(){
     actions.classList.add('hidden');
     return;
   }
-  const items=S.stock[bodega]||[];
+  const rawItems=S.stock[bodega]||[];
+  // Ordenar por nombre de artículo, luego talla
+  const items=[...rawItems].sort((a,b)=>{
+    const ni=norm(a.item||''), nj=norm(b.item||'');
+    if(ni!==nj) return ni.localeCompare(nj,'es');
+    return (a.talla||'').localeCompare(b.talla||'','es');
+  });
   empty.classList.add('hidden');
   wrap.classList.remove('hidden');
   actions.classList.remove('hidden');
@@ -2778,7 +2785,7 @@ function renderInventario(){
       const rowCls=bajo?'bg-red-50':'';
       const badge=bajo?`<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">⚠ Bajo</span>`
         :`<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">OK</span>`;
-      return `<tr class="border-t border-gray-100 hover:bg-gray-50 ${rowCls}">
+      return `<tr class="border-t border-gray-100 hover:bg-gray-50 ${rowCls}" data-item="${(it.item||'').replace(/"/g,'&quot;')}">
       <td class="px-4 py-2 text-gray-800">${it.item||'—'}</td>
       <td class="px-4 py-2 text-gray-500">${it.talla||'—'}</td>
       <td class="px-4 py-2 text-center font-bold ${bajo?'text-red-600':'text-vc-700'}">${sa}</td>
@@ -2790,6 +2797,13 @@ function renderInventario(){
       <td class="px-4 py-2 text-center">${badge}</td>
     </tr>`;
     })()}`).join('');
+  _filterInvRows();
+}
+function _filterInvRows(){
+  const q=norm(document.getElementById('invSearch')?.value||'');
+  document.querySelectorAll('#invBody tr').forEach(tr=>{
+    tr.style.display = (!q||norm(tr.dataset.item||'').includes(q)) ? '' : 'none';
+  });
 }
 
 function onInvInput(el){
