@@ -1517,7 +1517,29 @@ async function importExcel(inp){
     bar.style.width='42%'; msg.textContent='Parseando hoja ENTREGAS...';
     const entregasMap   = parseEntregas(wb);
 
-    const allItems = [...stockBulnes, ...stockRomeral, ...stockEcocorp];
+    // Auto-crear stock para artículos en Matriz EPP que no existen en hojas de stock
+    const _sedeToBodega=s=>{const u=(s||'').toUpperCase();if(u.includes('BULNES'))return 'BULNES (1+3)';if(u.includes('ROMERAL'))return 'ROMERAL (Unificada)';if(u.includes('ECOCORP'))return 'ECOCORP';return null;};
+    const _matrizPorBodega={};
+    workers.forEach(w=>{
+      const b=_sedeToBodega(w.sede); if(!b) return;
+      if(!_matrizPorBodega[b]) _matrizPorBodega[b]={};
+      Object.entries(w.tallas||{}).forEach(([item,talla])=>{
+        if(!_matrizPorBodega[b][item]) _matrizPorBodega[b][item]=new Set();
+        if(talla&&String(talla).trim()) _matrizPorBodega[b][item].add(String(talla).trim());
+      });
+    });
+    const _stockExistente=new Set();
+    [...stockBulnes,...stockRomeral,...stockEcocorp].forEach(it=>_stockExistente.add(it.bodega+'|'+norm(it.item||'')));
+    const autoStock=[];
+    Object.entries(_matrizPorBodega).forEach(([bodega,items])=>{
+      Object.entries(items).forEach(([itemName,tallas])=>{
+        if(_stockExistente.has(bodega+'|'+norm(itemName))) return;
+        const tlist=tallas.size>0?[...tallas]:['-'];
+        tlist.forEach((talla,i)=>autoStock.push({item:itemName,talla,formato:'UNIDAD',cargos:'',demanda:0,stockActual:0,stockCritico:0,orden:9000+i,bodega}));
+      });
+    });
+
+    const allItems = [...stockBulnes, ...stockRomeral, ...stockEcocorp, ...autoStock];
     bar.style.width='50%'; msg.textContent=`Subiendo ${allItems.length} artículos...`;
 
     // Delete existing stock docs
@@ -1567,8 +1589,15 @@ async function importExcel(inp){
 
     bar.style.width='100%'; msg.textContent='¡Importación completada!';
     const nEntregas=Object.keys(entregasMap).length;
-    status.textContent=`✅ ${allItems.length} artículos, ${workers.length} trabajadores${nEntregas?', '+nEntregas+' criterios de entrega':''} importados.`;
+    status.textContent=`✅ ${allItems.length} artículos (${autoStock.length} nuevos desde Matriz EPP), ${workers.length} trabajadores${nEntregas?', '+nEntregas+' criterios de entrega':''} importados.`;
     showToast(`Stock importado: ${allItems.length} artículos, ${workers.length} trabajadores.`,'ok');
+    if(autoStock.length>0){
+      const nombres=[...new Set(autoStock.map(x=>x.item))];
+      const div=document.createElement('div');
+      div.className='mt-3 p-3 bg-amber-50 border border-amber-300 rounded-lg text-sm text-amber-800';
+      div.innerHTML=`<strong>⚠ ${nombres.length} artículo${nombres.length>1?'s':''} nuevo${nombres.length>1?'s':''} creado${nombres.length>1?'s':''} desde Matriz EPP con stock 0:</strong><br>${nombres.join(', ')}<br><button onclick="toggleInventario();this.closest('div').remove()" class="mt-2 px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700">📦 Ir al Inventario para ingresar cantidades</button>`;
+      prog.after(div);
+    }
   } catch(e){
     msg.textContent='Error: '+e.message;
     status.textContent='❌ '+e.message;
