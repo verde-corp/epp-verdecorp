@@ -2790,10 +2790,10 @@ function renderInventario(){
       <td class="px-4 py-2 text-gray-500">${it.talla||'—'}</td>
       <td class="px-4 py-2 text-center font-bold ${bajo?'text-red-600':'text-vc-700'}">${sa}</td>
       <td class="px-4 py-2 text-center">
-        <input type="number" min="0" value="${sa}" data-idx="${i}"
-          class="input-base w-20 text-center py-1" oninput="onInvInput(this)">
+        <input type="number" min="0" value="${sa}" data-id="${it._id||''}" data-sa="${sa}"
+          class="input-base w-20 text-center py-1 inv-input" oninput="onInvInput(this)">
       </td>
-      <td class="px-4 py-2 text-center font-bold text-gray-400" id="invDif${i}">0</td>
+      <td class="px-4 py-2 text-center font-bold text-gray-400" id="invDif${it._id||i}">0</td>
       <td class="px-4 py-2 text-center">${badge}</td>
     </tr>`;
     })()}`).join('');
@@ -2807,38 +2807,37 @@ function _filterInvRows(){
 }
 
 function onInvInput(el){
-  const i=parseInt(el.dataset.idx);
-  const bodega=document.getElementById('invBodega').value;
-  const it=(S.stock[bodega]||[])[i];
-  if(!it) return;
+  const id=el.dataset.id;
+  const sa=parseInt(el.dataset.sa)||0;
   const conteo=parseInt(el.value)||0;
-  const dif=conteo-(it.stockActual??0);
-  const cell=document.getElementById('invDif'+i);
-  cell.textContent=(dif>=0?'+':'')+dif;
-  cell.className='px-4 py-2 text-center font-bold '+(dif>0?'text-green-600':dif<0?'text-red-500':'text-gray-400');
+  const dif=conteo-sa;
+  const cell=document.getElementById('invDif'+id);
+  if(cell){ cell.textContent=(dif>=0?'+':'')+dif; cell.className='px-4 py-2 text-center font-bold '+(dif>0?'text-green-600':dif<0?'text-red-500':'text-gray-400'); }
 }
 
 async function guardarInventario(){
   const bodega=document.getElementById('invBodega').value;
   if(!bodega){ showToast('Selecciona una bodega','error'); return; }
   const items=S.stock[bodega]||[];
-  const inputs=document.querySelectorAll('#invBody input[data-idx]');
+  const inputs=document.querySelectorAll('#invBody input.inv-input');
   const batch=db.batch();
   let changes=0;
   const promises=[];
   inputs.forEach(inp=>{
-    const i=parseInt(inp.dataset.idx);
-    const it=items[i];
-    if(!it||!it._id) return;
+    const docId=inp.dataset.id;
+    if(!docId) return;
+    const sa=parseInt(inp.dataset.sa)||0;
     const conteo=parseInt(inp.value)||0;
-    if(conteo!==(it.stockActual??0)){
-      batch.update(db.collection('stock').doc(it._id),{stockActual:conteo});
+    if(conteo!==sa){
+      const it=(items).find(x=>x._id===docId);
+      if(!it) return;
+      batch.update(db.collection('stock').doc(docId),{stockActual:conteo});
       promises.push(db.collection('historial').add({
         tipo:'AJUSTE INVENTARIO',
         item:it.item, talla:it.talla||'—', bodega,
         trabajador:S.userDoc?.nombre||S.user?.email||'—',
         marca:'—', recambio:false,
-        cantidad:conteo-(it.stockActual??0),
+        cantidad:conteo-sa,
         fecha:firebase.firestore.FieldValue.serverTimestamp(),
         uid:S.user?.uid||'', email:S.user?.email||'', firma:null
       }));
