@@ -1048,6 +1048,7 @@ function initFirebase(cfg){
   try {
     if (!firebase.apps.length) firebase.initializeApp(cfg);
     db   = firebase.firestore();
+    db.settings({ experimentalAutoDetectLongPolling: true, merge: true }); // fix para redes con proxy/firewall que bloquean WebChannel
     auth = firebase.auth();
     auth.onAuthStateChanged(onAuthChanged);
     _checkOobCode();
@@ -1377,10 +1378,10 @@ function setupListeners(){
     onWorkersUpdated();
   }, err=>console.error('Workers listener error:',err));
 
-  // Historial listener (last 300)
+  // Historial listener (last 1000)
   let _histPrevFirmas = {}; // track firma state to detect new signatures
   const unsubHist = db.collection('historial')
-    .orderBy('fecha','desc').limit(300)
+    .orderBy('fecha','desc').limit(1000)
     .onSnapshot(snap=>{
       S.hist=[];
       snap.docChanges().forEach(change=>{
@@ -1407,7 +1408,17 @@ function setupListeners(){
           _histPrevFirmas[doc.id] = !!d.firma;
       });
       onHistUpdated();
-    }, err=>console.error('Hist listener error:',err));
+    }, async err=>{
+      console.error('Hist listener error:',err);
+      // Fallback: carga única si el listener falla (ej: Edge Tracking Prevention bloquea WebChannel)
+      try {
+        const snap = await db.collection('historial').orderBy('fecha','desc').limit(1000).get();
+        S.hist=[];
+        snap.forEach(doc=>{ const d=doc.data(); d._id=doc.id; S.hist.push(d); if(!(_histPrevFirmas[doc.id]!==undefined)) _histPrevFirmas[doc.id]=!!d.firma; });
+        onHistUpdated();
+        showToast('Historial cargado (modo estático — usa Chrome para tiempo real)','warn',7000);
+      } catch(e2){ console.error('Hist fallback error:',e2); }
+    });
 
   // Criterios de entrega — listener en tiempo real
   const unsubConfig = db.collection('config').doc('entregas')
@@ -3620,6 +3631,7 @@ async function toggleWorkerActivo(docId, currentlyActivo){
     const docId = hash.slice(7).split('/')[0];
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db = firebase.firestore();
+    db.settings({ experimentalAutoDetectLongPolling: true, merge: true });
     setScreen('scrFirmaPublica');
     firebase.auth().signInAnonymously()
       .then(()=> initFirmaPublica(docId))
