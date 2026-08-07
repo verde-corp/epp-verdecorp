@@ -1378,11 +1378,25 @@ function setupListeners(){
     onWorkersUpdated();
   }, err=>console.error('Workers listener error:',err));
 
-  // Historial listener (last 1000)
-  let _histPrevFirmas = {}; // track firma state to detect new signatures
+  // Historial listener (last 500 recent) + always load ALL entregas separately
+  let _histPrevFirmas = {};
+  let _entregasLoaded = false;
+
+  async function _mergeEntregas(){
+    if(_entregasLoaded) return;
+    _entregasLoaded = true;
+    try {
+      const snap = await db.collection('historial').where('tipo','==','ENTREGA').get();
+      const ids = new Set(S.hist.map(h=>h._id));
+      snap.forEach(doc=>{ if(!ids.has(doc.id)){ const d=doc.data(); d._id=doc.id; S.hist.push(d); } });
+      S.hist.sort((a,b)=>(b.fecha?.seconds||0)-(a.fecha?.seconds||0));
+      onHistUpdated();
+    } catch(e){ console.error('Entregas merge error:',e); }
+  }
+
   const unsubHist = db.collection('historial')
-    .orderBy('fecha','desc').limit(1000)
-    .onSnapshot(snap=>{
+    .orderBy('fecha','desc').limit(500)
+    .onSnapshot(async snap=>{
       S.hist=[];
       snap.docChanges().forEach(change=>{
         // Detect when a firma is added to an existing doc (worker signed remotely)
@@ -1408,15 +1422,17 @@ function setupListeners(){
           _histPrevFirmas[doc.id] = !!d.firma;
       });
       onHistUpdated();
+      _mergeEntregas(); // cargar todas las entregas (pueden estar fuera del límite de 500)
     }, async err=>{
       console.error('Hist listener error:',err);
       // Fallback: carga única si el listener falla (ej: Edge Tracking Prevention bloquea WebChannel)
       try {
-        const snap = await db.collection('historial').orderBy('fecha','desc').limit(1000).get();
+        const snap = await db.collection('historial').orderBy('fecha','desc').limit(500).get();
         S.hist=[];
         snap.forEach(doc=>{ const d=doc.data(); d._id=doc.id; S.hist.push(d); if(!(_histPrevFirmas[doc.id]!==undefined)) _histPrevFirmas[doc.id]=!!d.firma; });
         onHistUpdated();
         showToast('Historial cargado (modo estático — usa Chrome para tiempo real)','warn',7000);
+        _mergeEntregas();
       } catch(e2){ console.error('Hist fallback error:',e2); }
     });
 
