@@ -2009,7 +2009,7 @@ function toggleTallaEdit(){ /* select always editable */ }
 // FIRMA DIGITAL
 // ══════════════════════════════════════════════════════
 let _entregaPendiente=null, _firmaCtx=null, _firmaCanvas=null;
-let _firmaDibujando=false, _firmaVacia=true, _firmaMode='nueva', _firmaRegistroId=null;
+let _firmaDibujando=false, _firmaVacia=true, _firmaMode='nueva', _firmaRegistroId=null, _firmaDesc='';
 
 function _firmaPos(canvas, e){
   const r=canvas.getBoundingClientRect();
@@ -2033,7 +2033,7 @@ function limpiarCanvas(){
 }
 
 function abrirModalFirmaExistente(id, descripcion){
-  _firmaMode='existente'; _firmaRegistroId=id; _firmaVacia=true;
+  _firmaMode='existente'; _firmaRegistroId=id; _firmaVacia=true; _firmaDesc=descripcion||'';
   document.getElementById('firmaSubtitulo').textContent=descripcion;
   document.getElementById('firmaPlaceholder').style.display='';
   const canvas=document.getElementById('firmaCanvas');
@@ -2152,10 +2152,16 @@ async function _guardarEntrega(d, firma){
 // ══════════════════════════════════════════════════════
 async function enviarACelular(){
   document.getElementById('modalFirma').classList.add('hidden');
-  const docId = await _guardarEntrega(_entregaPendiente, null);
-  if(docId){
-    const desc=`${_entregaPendiente.w?_entregaPendiente.w.nombre:'Sin trabajador'} — ${_entregaPendiente.cantidad} × ${_entregaPendiente.nombre}${_entregaPendiente.talla?' talla '+_entregaPendiente.talla:''}`;
-    mostrarLinkFirma(docId, desc);
+  if(_firmaMode==='existente'){
+    // El registro ya existe en Firestore — solo mostrar el link
+    mostrarLinkFirma(_firmaRegistroId, _firmaDesc);
+  } else {
+    // Nueva entrega — guardar primero y luego mostrar link
+    const docId = await _guardarEntrega(_entregaPendiente, null);
+    if(docId){
+      const desc=`${_entregaPendiente.w?_entregaPendiente.w.nombre:'Sin trabajador'} — ${_entregaPendiente.cantidad} × ${_entregaPendiente.nombre}${_entregaPendiente.talla?' talla '+_entregaPendiente.talla:''}`;
+      mostrarLinkFirma(docId, desc);
+    }
   }
 }
 
