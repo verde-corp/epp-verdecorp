@@ -2569,6 +2569,7 @@ function renderHistorial(){
     const ts=fec.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
     const isEntrega=h.tipo==='ENTREGA';
     const isAjuste=h.tipo==='AJUSTE INVENTARIO';
+    const isTraspaso=h.tipo==='TRASPASO';
     const tieneFirma=!!h.firma;
     // Firma column: for entregas show ✍️ (unsigned) or ✅ (signed); for others show —
     let firmaCell='<td class="px-4 py-2.5 text-center text-gray-300 text-xs">—</td>';
@@ -2592,8 +2593,8 @@ function renderHistorial(){
       <td class="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">${ds}<br><span class="text-gray-400">${ts}</span></td>
       <td class="px-4 py-2.5">
         <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold
-          ${isEntrega?'bg-vc-100 text-vc-800':isAjuste?'bg-amber-100 text-amber-800':'bg-blue-100 text-blue-800'}">
-          ${isEntrega?'📦 Entrega':isAjuste?'📋 Inventario':'🚚 Entrada'}
+          ${isEntrega?'bg-vc-100 text-vc-800':isAjuste?'bg-amber-100 text-amber-800':isTraspaso?'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}">
+          ${isEntrega?'📦 Entrega':isAjuste?'📋 Inventario':isTraspaso?'🔄 Traspaso':'🚚 Entrada'}
         </span>
       </td>
       <td class="px-4 py-2.5 font-semibold text-sm">${h.item||'—'}</td>
@@ -2704,7 +2705,7 @@ async function registrarTraspaso(){
       await db.collection('stock').add({item,talla,bodega:destino,stockActual:cant,stockMinimo:0});
     }
     await db.collection('historial').add({
-      tipo:'TRASPASO',fecha:new Date().toISOString(),item,talla,cantidad:cant,
+      tipo:'TRASPASO',fecha:firebase.firestore.Timestamp.now(),item,talla,cantidad:cant,
       bodegaOrigen:origen,bodegaDestino:destino,motivo:motivo||'',
       registradoPor:S.userEmail||'',workerNombre:S.userEmail||''
     });
