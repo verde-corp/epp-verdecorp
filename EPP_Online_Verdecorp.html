@@ -865,7 +865,12 @@
               <button onclick="abrirModalActa()"
                 class="flex items-center gap-1.5 text-xs text-vc-700 hover:text-vc-900 font-semibold
                 border border-vc-300 hover:border-vc-500 bg-vc-50 hover:bg-vc-100 px-3 py-1.5 rounded-lg transition">
-                📄 Generar Acta de Entrega
+                📄 Acta por Trabajador
+              </button>
+              <button onclick="abrirModalActaEPP()"
+                class="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-900 font-semibold
+                border border-blue-300 hover:border-blue-500 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition">
+                📋 Acta por EPP
               </button>
             </div>
 
@@ -952,6 +957,32 @@
         🖨 Generar Acta
       </button>
       <button onclick="document.getElementById('modalActa').classList.add('hidden')"
+        class="btn-primary bg-gray-100 hover:bg-gray-200 text-gray-600">
+        Cerrar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ACTA COLECTIVA POR EPP -->
+<div id="modalActaEPP" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+    <h3 class="font-bold text-gray-800 text-base mb-1">📋 Acta Colectiva por EPP</h3>
+    <p class="text-sm text-gray-500 mb-4">Genera un acta con todos los trabajadores que recibieron un artículo específico.</p>
+    <label class="label-sm">Artículo EPP</label>
+    <select id="actaEPPItem" onchange="onActaEPPItemChange()" class="input-base mb-3">
+      <option value="">Seleccionar artículo...</option>
+    </select>
+    <label class="label-sm">Talla</label>
+    <select id="actaEPPTalla" class="input-base mb-5">
+      <option value="">Todas las tallas</option>
+    </select>
+    <div class="flex gap-3">
+      <button onclick="generarActaEPP()"
+        class="btn-primary bg-blue-700 hover:bg-blue-800 text-white flex-1 justify-center">
+        🖨 Generar Acta
+      </button>
+      <button onclick="document.getElementById('modalActaEPP').classList.add('hidden')"
         class="btn-primary bg-gray-100 hover:bg-gray-200 text-gray-600">
         Cerrar
       </button>
@@ -2401,6 +2432,129 @@ tr:nth-child(even){background:#f9faf9}
 </body></html>`;
 
   document.getElementById('modalActa').classList.add('hidden');
+  const win=window.open('','_blank');
+  if(win){ win.document.write(html); win.document.close(); }
+  else showToast('Activa las ventanas emergentes para generar el acta.','warn',5000);
+}
+
+function abrirModalActaEPP(){
+  const items=[...new Set(
+    S.hist.filter(h=>h.tipo==='ENTREGA'&&h.item).map(h=>h.item)
+  )].sort();
+  const selItem=document.getElementById('actaEPPItem');
+  selItem.innerHTML='<option value="">Seleccionar artículo...</option>'+
+    items.map(i=>`<option value="${i}">${i}</option>`).join('');
+  // Pre-fill from historial filter if active
+  const filtroArt=document.getElementById('histArticulo')?.value;
+  if(filtroArt) selItem.value=filtroArt;
+  document.getElementById('actaEPPTalla').innerHTML='<option value="">Todas las tallas</option>';
+  if(filtroArt) onActaEPPItemChange();
+  document.getElementById('modalActaEPP').classList.remove('hidden');
+}
+
+function onActaEPPItemChange(){
+  const item=document.getElementById('actaEPPItem').value;
+  const tallas=[...new Set(
+    S.hist.filter(h=>h.tipo==='ENTREGA'&&h.item===item&&h.talla).map(h=>h.talla)
+  )].sort();
+  const sel=document.getElementById('actaEPPTalla');
+  sel.innerHTML='<option value="">Todas las tallas</option>'+
+    tallas.map(t=>`<option value="${t}">${t}</option>`).join('');
+}
+
+function generarActaEPP(){
+  const item=document.getElementById('actaEPPItem').value;
+  const talla=document.getElementById('actaEPPTalla').value;
+  if(!item){ showToast('Selecciona un artículo.','warn'); return; }
+
+  const entregas=S.hist
+    .filter(h=>h.tipo==='ENTREGA'&&h.item===item&&(!talla||h.talla===talla))
+    .slice().sort((a,b)=>{
+      const fa=a.fecha?.toDate?a.fecha.toDate():new Date(a.fecha||0);
+      const fb=b.fecha?.toDate?b.fecha.toDate():new Date(b.fecha||0);
+      return fa-fb;
+    });
+
+  if(!entregas.length){ showToast('Sin entregas registradas para este artículo.','warn'); return; }
+
+  const hoy=new Date().toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'});
+  const titulo=talla?`${item} — Talla ${talla}`:item;
+
+  const filas=entregas.map((h,i)=>{
+    const fec=h.fecha?.toDate?h.fecha.toDate():new Date(h.fecha||0);
+    const ds=fec.toLocaleDateString('es-CL',{day:'2-digit',month:'2-digit',year:'numeric'});
+    const firmaHtml=h.firma
+      ?`<img src="${h.firma}" style="max-height:52px;max-width:130px;display:block;margin:auto;">`
+      :`<span style="color:#bbb;font-size:10px;font-style:italic;">Sin firma</span>`;
+    const w=S.workers.find(x=>norm(x.nombre)===norm(h.trabajador||''));
+    return `<tr style="border-bottom:1px solid #e5e7eb;">
+      <td style="padding:7px 8px;font-size:11px;color:#555;text-align:center;">${i+1}</td>
+      <td style="padding:7px 8px;font-size:12px;font-weight:600;">${h.trabajador||'—'}</td>
+      <td style="padding:7px 8px;font-size:11px;color:#555;">${w?.cargo||h.cargo||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:center;">${h.talla||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:center;">${h.bodega||'—'}</td>
+      <td style="padding:7px 8px;font-size:12px;text-align:center;font-weight:700;">${h.cantidad||0}</td>
+      <td style="padding:7px 8px;font-size:11px;text-align:center;white-space:nowrap;">${ds}</td>
+      <td style="padding:4px 8px;text-align:center;min-width:130px;height:58px;">${firmaHtml}</td>
+    </tr>`;
+  }).join('');
+
+  const html=`<!DOCTYPE html><html lang="es"><head>
+<meta charset="UTF-8">
+<title>Acta EPP — ${titulo}</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;padding:22px;color:#111;font-size:13px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid #166534;padding-bottom:12px;margin-bottom:14px}
+.logo{font-size:22px;font-weight:900;letter-spacing:-0.5px}
+.logo span{color:#166534}
+.docref{text-align:right;font-size:10px;color:#666;line-height:1.5}
+.docref b{font-size:12px;color:#111;display:block}
+h2{text-align:center;font-size:13px;font-weight:bold;text-transform:uppercase;letter-spacing:1.5px;margin:12px 0 14px}
+.info{display:grid;grid-template-columns:1fr 1fr;gap:5px 28px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:11px 14px;margin-bottom:16px}
+.info p{font-size:11.5px;color:#374151}
+.info b{color:#1d4ed8}
+table{width:100%;border-collapse:collapse;border:1px solid #d1d5db;font-size:12px}
+thead tr{background:#1d4ed8;color:#fff}
+th{padding:8px 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;text-align:center;font-weight:700}
+th:nth-child(2){text-align:left}
+tr:nth-child(even){background:#f8fafc}
+.nota{margin-top:20px;border-top:1px solid #e5e7eb;padding-top:10px;font-size:9.5px;color:#6b7280;line-height:1.5}
+.btn-print{display:block;margin:18px auto 0;padding:8px 28px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;font-size:13px;cursor:pointer;font-weight:bold}
+@media print{@page{size:letter landscape;margin:1.2cm}body{padding:0}.btn-print{display:none}}
+</style></head><body>
+<div class="top">
+  <div class="logo">VERDE<span>CORP</span></div>
+  <div class="docref"><b>REG-PSIGRES-01.2</b>Registro Colectivo de Entrega de EPP<br>Emisión: ${hoy}</div>
+</div>
+<h2>Acta Colectiva — Entrega de ${titulo}</h2>
+<div class="info">
+  <p><b>Artículo EPP:</b> ${item}</p>
+  <p><b>Talla:</b> ${talla||'Todas'}</p>
+  <p><b>Total trabajadores:</b> ${entregas.length}</p>
+  <p><b>Fecha de emisión:</b> ${hoy}</p>
+</div>
+<table>
+  <thead><tr>
+    <th style="min-width:30px">#</th>
+    <th style="text-align:left;min-width:160px">Trabajador</th>
+    <th style="text-align:left;min-width:120px">Cargo</th>
+    <th>Talla</th>
+    <th>Bodega</th>
+    <th>Cant.</th>
+    <th>Fecha</th>
+    <th style="min-width:130px">Firma del Trabajador</th>
+  </tr></thead>
+  <tbody>${filas}</tbody>
+</table>
+<div class="nota">
+  Documento generado el ${hoy} — Sistema EPP Online Verdecorp.&nbsp;&nbsp;
+  Total de ${entregas.length} entrega(s) registrada(s) para ${titulo}.
+</div>
+<button class="btn-print" onclick="window.print()">🖨 Imprimir / Guardar como PDF</button>
+</body></html>`;
+
+  document.getElementById('modalActaEPP').classList.add('hidden');
   const win=window.open('','_blank');
   if(win){ win.document.write(html); win.document.close(); }
   else showToast('Activa las ventanas emergentes para generar el acta.','warn',5000);
